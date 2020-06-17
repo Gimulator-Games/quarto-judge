@@ -1,16 +1,18 @@
 package types
 
-type Playgroud struct {
+type Board struct {
 	Pieces    map[int]Piece
 	Positions []Position
 	Turn      string
 	Picked    int
 }
 
-func NewPlayground() *Playgroud {
-	return &Playgroud{
+func NewBoard(turn string) Board {
+	return Board{
 		Positions: defaultPositions,
 		Pieces:    defaultPieces,
+		Turn:      turn,
+		Picked:    0,
 	}
 }
 
@@ -91,4 +93,15 @@ var defaultPositions = []Position{
 	{X: 4, Y: 2, Piece: 0},
 	{X: 4, Y: 3, Piece: 0},
 	{X: 4, Y: 4, Piece: 0},
+}
+
+type Action struct {
+	Picked int
+	X      int
+	Y      int
+}
+
+type Player struct {
+	Name string
+	Id   string
 }
