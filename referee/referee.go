@@ -105,14 +105,14 @@ func (r *Referee) judge(obj client.Object) bool {
 
 	log := r.log.WithField("turn", obj.Key.Name)
 
-	bytes, ok := obj.Value.([]byte)
+	bytes, ok := obj.Value.(string)
 	if !ok {
 		log.Error("could not cast value to bytes")
 		return false
 	}
 
 	action := types.Action{}
-	if err := json.Unmarshal(bytes, &action); err != nil {
+	if err := json.Unmarshal([]byte(bytes), &action); err != nil {
 		log.Error("could not unmarshal action")
 		return false
 	}

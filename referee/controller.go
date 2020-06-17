@@ -19,6 +19,7 @@ const (
 
 	namespace   = "quarto"
 	name        = "referee"
+	boardName   = "board"
 	apiTimeWait = time.Second * 1
 )
 
@@ -67,9 +68,11 @@ func (c *cli) receiptPlayers(ctx context.Context) (*client.Object, *client.Objec
 			if o1, o2, n := c.findPlayers(key); n == 2 {
 				return o1, o2, n
 			} else if n == 1 {
-
+				c.setEndOfGameWithOnePlayer(o1)
+				return o1, nil, n
 			} else {
-
+				c.setEndOfGameWithoutPlayer()
+				return nil, nil, n
 			}
 		}
 	}
@@ -102,7 +105,7 @@ func (c *cli) setEndOfGameWithoutPlayer() error {
 	return c.setEndOfGame(res)
 }
 
-func (c *cli) setEndOfGameWithOnePlayer(obj client.Object) error {
+func (c *cli) setEndOfGameWithOnePlayer(obj *client.Object) error {
 	scores := make(map[string]map[int]int)
 	scores[obj.Meta.Owner] = map[int]int{1: 1}
 
@@ -147,11 +150,11 @@ func (c *cli) setBoard(b types.Board) error {
 	key := client.Key{
 		Namespace: namespace,
 		Type:      verdictType,
-		Name:      name,
+		Name:      boardName,
 	}
 
 	for {
-		if err := c.Set(key, val); err == nil {
+		if err := c.Set(key, string(val)); err == nil {
 			return nil
 		}
 		time.Sleep(apiTimeWait)
