@@ -81,7 +81,7 @@ func (r *Referee) listen() error {
 			}
 
 			if r.judge(obj) {
-				break
+				return nil
 			}
 		}
 	}
@@ -170,7 +170,11 @@ func (r *Referee) changeTurn() {
 }
 
 func (r *Referee) validateAction(action types.Action) bool {
-	if action.X < 1 || action.X > 16 || action.Y < 1 || action.Y > 16 {
+	if action.X < 1 || action.X > 4 || action.Y < 1 || action.Y > 4 {
+		return false
+	}
+
+	if action.Picked == r.board.Picked {
 		return false
 	}
 
@@ -240,63 +244,36 @@ func (r *Referee) endOfGame(p1, p2 string, s1, s2 int) {
 }
 
 func (r *Referee) isWinState() bool {
-	var l, s, c, h [11]int
+	b := [5][5]int{}
 	for _, pos := range r.board.Positions {
 		if pos.Piece == 0 {
-			continue
-		}
-
-		piece := r.board.Pieces[pos.Piece]
-
-		if piece.Color == types.White {
-			c[pos.X]++
-			c[pos.Y+4]++
-			if pos.X == pos.Y {
-				c[9]++
-			}
-			if pos.X == 5-pos.Y {
-				c[10]++
-			}
-		}
-
-		if piece.Hole == types.Hollow {
-			h[pos.X]++
-			h[pos.Y+4]++
-			if pos.X == pos.Y {
-				h[9]++
-			}
-			if pos.X == 5-pos.Y {
-				h[10]++
-			}
-		}
-
-		if piece.Length == types.Short {
-			l[pos.X]++
-			l[pos.Y+4]++
-			if pos.X == pos.Y {
-				l[9]++
-			}
-			if pos.X == 5-pos.Y {
-				l[10]++
-			}
-		}
-
-		if piece.Shape == types.Round {
-			s[pos.X]++
-			s[pos.Y+4]++
-			if pos.X == pos.Y {
-				s[9]++
-			}
-			if pos.X == 5-pos.Y {
-				s[10]++
-			}
+			b[pos.X][pos.Y] = 0
+		} else {
+			b[pos.X][pos.Y] = r.board.Pieces[pos.Piece].Code()
 		}
 	}
 
-	for i := 1; i <= 10; i++ {
-		if s[i]%4 == 0 || l[i]%4 == 0 || h[i]%4 == 0 || c[i]%4 == 0 {
+	andDiamM := 255
+	andDiamS := 255
+
+	for i := 1; i <= 4; i++ {
+		andRow := 255
+		andCol := 255
+		for j := 1; j <= 4; j++ {
+			andRow &= b[i][j]
+			andCol &= b[j][i]
+		}
+
+		if andRow != 0 || andCol != 0 {
 			return true
 		}
+
+		andDiamM &= b[i][i]
+		andDiamS &= b[i][5-i]
+	}
+
+	if andDiamM != 0 || andDiamS != 0 {
+		return true
 	}
 	return false
 }

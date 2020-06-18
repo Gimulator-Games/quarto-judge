@@ -29,6 +29,35 @@ type Piece struct {
 	Hole   Hole
 }
 
+func (p Piece) Code() int {
+	var c int = 0
+	if p.Color == White {
+		c += 1
+	} else {
+		c += 2
+	}
+
+	if p.Hole == Hollow {
+		c += 4
+	} else {
+		c += 8
+	}
+
+	if p.Length == Short {
+		c += 16
+	} else {
+		c += 32
+	}
+
+	if p.Shape == Square {
+		c += 64
+	} else {
+		c += 128
+	}
+
+	return c
+}
+
 type Length string
 
 const (
