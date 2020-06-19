@@ -39,24 +39,26 @@ func NewReferee(roomID string) (Referee, error) {
 }
 
 func (r *Referee) Start() error {
+	r.log.Info("starting referee")
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 
+	r.log.Info("starting to receipt playes")
 	o1, o2, n := r.receiptPlayers(ctx)
 	if n != 2 {
-		r.log.WithField("object1", o1).WithField("object2", o2).Error("could not find two anget for starting the game")
 		return fmt.Errorf("could not find two anget for starting the game")
 	}
 	r.handlePlayers(o1, o2)
+	r.log.WithField("player1", r.p1).WithField("player2", r.p2).Debug("players are receipted")
 
 	r.board = types.NewBoard(r.p1.Name)
 
+	r.log.Info("starting to set initial board")
 	if err := r.setBoard(r.board); err != nil {
 		r.log.WithError(err).Error("could not set the initial board of the game")
 		return err
 	}
 
-	r.log.Info("starting to listen")
 	if err := r.listen(); err != nil {
 		r.log.WithError(err).Error("could not listen")
 		return err
@@ -68,89 +70,82 @@ func (r *Referee) Start() error {
 
 func (r *Referee) listen() error {
 	for {
+		r.log.Info("starting to listen")
 		timer := time.NewTimer(time.Second * 3)
 		select {
 		case <-timer.C:
-			r.log.Debug("turn's time is over")
-			r.endOfGameWithLoser(r.board.Turn)
-			return nil
+			r.log.WithField("turn", r.board.Turn).Debug("turn's time is over")
+			return r.endOfGameWithTimeout()
 		case obj := <-r.ch:
 			if obj.Key.Type != actionType {
 				r.log.Debug("invalid type of object, type should be action")
 				continue
 			}
 
-			if r.judge(obj) {
-				return nil
+			if err := r.judge(obj); err != nil {
+				r.log.WithError(err).Error("could not judge the recieved object")
 			}
 		}
 	}
 }
 
-func (r *Referee) judge(obj client.Object) bool {
-	if obj.Key.Name != r.board.Turn {
-		r.log.Info("invalid turn move: it's %s's turn", r.board.Turn)
-		return false
-	}
-	if obj.Key.Name == r.p1.Name && obj.Meta.Owner != r.p1.Id {
-		r.log.Info("invalid owner: incoming object has invalid owner = '%s' in meta", obj.Meta.Owner)
-		r.endOfGameWithLoser(r.p1.Name)
-		return true
-	}
-	if obj.Key.Name == r.p2.Name && obj.Meta.Owner != r.p2.Id {
-		r.log.Info("invalid owner: incoming object has invalid owner = '%s' in meta", obj.Meta.Owner)
-		r.endOfGameWithLoser(r.p1.Name)
-		return true
-	}
+func (r *Referee) judge(obj client.Object) error {
+	r.log.WithField("object", obj).Info("starting to judge recieved object")
 
-	log := r.log.WithField("turn", obj.Key.Name)
-
-	bytes, ok := obj.Value.(string)
-	if !ok {
-		log.Error("could not cast value to bytes")
-		return false
+	if err, isLosing := r.checkTurn(obj); isLosing {
+		return r.endOfGameWithLoser(obj.Meta.Owner)
+	} else if err != nil {
+		return err
 	}
 
 	action := types.Action{}
-	if err := json.Unmarshal([]byte(bytes), &action); err != nil {
-		log.Error("could not unmarshal action")
-		return false
+	if err := json.Unmarshal([]byte(obj.Value), &action); err != nil {
+		return err
 	}
+	r.log.WithField("action", action).Info("starting to judge recieved action")
 
 	if !r.validateAction(action) {
-		log.Info("invalid action")
-		r.endOfGameWithLoser(r.board.Turn)
-		return true
+		return r.endOfGameWithLoser(obj.Meta.Owner)
 	}
 	r.update(action)
 
 	if r.isWinState() {
-		log.Info("winnig action")
-		r.endOfGameWithWinner(obj.Key.Name)
-		return true
+		r.endOfGameWithWinner(obj.Meta.Owner)
+		return nil
 	}
 
 	if r.isTieState() {
-		log.Info("tie state")
 		r.endOfGameTie()
-		return true
+		return nil
 	}
 
 	r.changeTurn()
 
 	if err := r.setBoard(r.board); err != nil {
-		r.log.WithError(err).Error("could not set the board")
-		return true
+		return err
 	}
 
-	return false
+	return nil
+}
+
+func (r *Referee) checkTurn(obj client.Object) (error, bool) {
+	if obj.Key.Name != r.board.Turn {
+		return fmt.Errorf("invalid turn move: it's %s's turn", r.board.Turn), false
+	}
+	if obj.Key.Name == r.p1.Name && obj.Meta.Owner != r.p1.Id {
+		return fmt.Errorf("invalid owner: incoming object has invalid owner = '%s' in meta", obj.Meta.Owner), true
+	}
+	if obj.Key.Name == r.p2.Name && obj.Meta.Owner != r.p2.Id {
+		return fmt.Errorf("invalid owner: incoming object has invalid owner = '%s' in meta", obj.Meta.Owner), true
+	}
+	return nil, false
 }
 
 func (r *Referee) update(action types.Action) {
 	for i := range r.board.Positions {
 		pos := &r.board.Positions[i]
 		if action.X == pos.X && action.Y == pos.Y {
-			pos.Piece = r.board.Picked
+			pos.PieceID = r.board.Picked
 		}
 	}
 
@@ -164,34 +159,46 @@ func (r *Referee) changeTurn() {
 	case r.p2.Name:
 		r.board.Turn = r.p1.Name
 	default:
-		//Fatal
+		r.log.WithFields(logrus.Fields{
+			"p1":   r.p1.Name,
+			"p2":   r.p2.Name,
+			"turn": r.board.Turn,
+		}).Fatal("could not change the board's turn")
 		r.board.Turn = ""
 	}
 }
 
 func (r *Referee) validateAction(action types.Action) bool {
+	r.log.Info("starting to validate action")
+
 	if action.X < 1 || action.X > 4 || action.Y < 1 || action.Y > 4 {
+		fmt.Println("========================0")
 		return false
 	}
 
 	if action.Picked == r.board.Picked {
+		fmt.Println("===========6=============1")
 		return false
 	}
 
 	for _, pos := range r.board.Positions {
-		if pos.X == action.X && pos.Y == action.Y && pos.Piece != 0 {
+		if pos.X == action.X && pos.Y == action.Y && pos.PieceID != 0 {
+			fmt.Println("========================2")
 			return false
 		}
 
-		if action.Picked == pos.Piece {
+		if action.Picked == pos.PieceID {
+			fmt.Println("========================3")
 			return false
 		}
 	}
 
 	if action.Picked < 1 || action.Picked > 16 {
+		fmt.Println("========================4")
 		return false
 	}
 
+	r.log.Debug("action is valid")
 	return true
 }
 
@@ -218,38 +225,64 @@ func (r *Referee) handlePlayers(o1, o2 *client.Object) {
 	}
 }
 
-func (r *Referee) endOfGameWithWinner(winner string) {
-	if r.p1.Name == winner {
-		r.endOfGame(r.p1.Id, r.p2.Id, 3, 0)
+func (r *Referee) endOfGameWithTimeout() error {
+	var err error
+	if r.board.Turn == r.p1.Name {
+		err = r.endOfGameWithLoser(r.p1.Id)
 	} else {
-		r.endOfGame(r.p2.Id, r.p1.Id, 3, 0)
+		err = r.endOfGameWithLoser(r.p2.Id)
 	}
+	return err
 }
 
-func (r *Referee) endOfGameWithLoser(loser string) {
-	if r.p1.Name == loser {
-		r.endOfGame(r.p2.Id, r.p1.Id, 3, 0)
-	} else {
-		r.endOfGame(r.p1.Id, r.p2.Id, 3, 0)
+func (r *Referee) endOfGameWithWinner(winner string) error {
+	r.log.WithField("winner", winner).Info("end of game")
+	if r.p1.Id == winner {
+		return r.endOfGame(r.p1.Id, r.p2.Id, 3, 0)
 	}
+	return r.endOfGame(r.p2.Id, r.p1.Id, 3, 0)
 }
 
-func (r *Referee) endOfGameTie() {
-	r.endOfGame(r.p1.Id, r.p2.Id, 1, 1)
-
+func (r *Referee) endOfGameWithLoser(loser string) error {
+	r.log.WithField("loser", loser).Info("end of game")
+	if r.p1.Id == loser {
+		return r.endOfGame(r.p2.Id, r.p1.Id, 3, 0)
+	}
+	return r.endOfGame(r.p1.Id, r.p2.Id, 3, 0)
 }
 
-func (r *Referee) endOfGame(p1, p2 string, s1, s2 int) {
+func (r *Referee) endOfGameTie() error {
+	r.log.Info("end of game in tie state")
+	return r.endOfGame(r.p1.Id, r.p2.Id, 1, 1)
+}
 
+func (r *Referee) endOfGame(p1, p2 string, s1, s2 int) error {
+	r.board.Turn = ""
+	if err := r.setBoard(r.board); err != nil {
+		return err
+	}
+
+	scores := make(map[string]map[int]int)
+	scores[p1] = map[int]int{1: s1}
+	scores[p2] = map[int]int{1: s2}
+
+	res := result{
+		RoomID:  r.roomID,
+		Status:  "SUCCESS",
+		Message: "",
+		Scores:  scores,
+	}
+
+	return r.setEndOfGame(res)
 }
 
 func (r *Referee) isWinState() bool {
 	b := [5][5]int{}
 	for _, pos := range r.board.Positions {
-		if pos.Piece == 0 {
+		if pos.PieceID == 0 {
 			b[pos.X][pos.Y] = 0
 		} else {
-			b[pos.X][pos.Y] = r.board.Pieces[pos.Piece].Code()
+			b[pos.X][pos.Y] = r.board.Pieces[pos.PieceID].Code()
 		}
 	}
 
@@ -265,6 +298,7 @@ func (r *Referee) isWinState() bool {
 		}
 
 		if andRow != 0 || andCol != 0 {
+			r.log.WithField("index", i).Debug("row or col cause to win")
 			return true
 		}
 
@@ -273,6 +307,7 @@ func (r *Referee) isWinState() bool {
 	}
 
 	if andDiamM != 0 || andDiamS != 0 {
+		r.log.Debug("Diams cause to win")
 		return true
 	}
 	return false
@@ -280,7 +315,7 @@ func (r *Referee) isWinState() bool {
 
 func (r *Referee) isTieState() bool {
 	for _, pos := range r.board.Positions {
-		if pos.Piece == 0 {
+		if pos.PieceID == 0 {
 			return false
 		}
 	}

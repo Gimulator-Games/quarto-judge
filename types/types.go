@@ -1,10 +1,12 @@
 package types
 
+import "fmt"
+
 type Board struct {
-	Pieces    map[int]Piece
-	Positions []Position
-	Turn      string
-	Picked    int
+	Pieces    map[int]Piece `json:"pieces"`
+	Positions []Position    `json:"positions"`
+	Turn      string        `json:"turn"`
+	Picked    int           `json:"picked"`
 }
 
 func NewBoard(turn string) Board {
@@ -17,16 +19,16 @@ func NewBoard(turn string) Board {
 }
 
 type Position struct {
-	X     int
-	Y     int
-	Piece int
+	X       int `json:"x"`
+	Y       int `json:"y"`
+	PieceID int `json:"piece-id"`
 }
 
 type Piece struct {
-	Length Length
-	Shape  Shape
-	Color  Color
-	Hole   Hole
+	Length Length `json:"length"`
+	Shape  Shape  `json:"shape"`
+	Color  Color  `json:"color"`
+	Hole   Hole   `json:"hole"`
 }
 
 func (p Piece) Code() int {
@@ -106,28 +108,32 @@ var defaultPieces = map[int]Piece{
 }
 
 var defaultPositions = []Position{
-	{X: 1, Y: 1, Piece: 0},
-	{X: 1, Y: 2, Piece: 0},
-	{X: 1, Y: 3, Piece: 0},
-	{X: 1, Y: 4, Piece: 0},
-	{X: 2, Y: 1, Piece: 0},
-	{X: 2, Y: 2, Piece: 0},
-	{X: 2, Y: 3, Piece: 0},
-	{X: 2, Y: 4, Piece: 0},
-	{X: 3, Y: 1, Piece: 0},
-	{X: 3, Y: 2, Piece: 0},
-	{X: 3, Y: 3, Piece: 0},
-	{X: 3, Y: 4, Piece: 0},
-	{X: 4, Y: 1, Piece: 0},
-	{X: 4, Y: 2, Piece: 0},
-	{X: 4, Y: 3, Piece: 0},
-	{X: 4, Y: 4, Piece: 0},
+	{X: 1, Y: 1, PieceID: 0},
+	{X: 1, Y: 2, PieceID: 0},
+	{X: 1, Y: 3, PieceID: 0},
+	{X: 1, Y: 4, PieceID: 0},
+	{X: 2, Y: 1, PieceID: 0},
+	{X: 2, Y: 2, PieceID: 0},
+	{X: 2, Y: 3, PieceID: 0},
+	{X: 2, Y: 4, PieceID: 0},
+	{X: 3, Y: 1, PieceID: 0},
+	{X: 3, Y: 2, PieceID: 0},
+	{X: 3, Y: 3, PieceID: 0},
+	{X: 3, Y: 4, PieceID: 0},
+	{X: 4, Y: 1, PieceID: 0},
+	{X: 4, Y: 2, PieceID: 0},
+	{X: 4, Y: 3, PieceID: 0},
+	{X: 4, Y: 4, PieceID: 0},
 }
 
 type Action struct {
-	Picked int
-	X      int
-	Y      int
+	Picked int `json:"picked"`
+	X      int `json:"x"`
+	Y      int `json:"y"`
+}
+
+func (a Action) String() string {
+	return fmt.Sprintf("{x: %d, y: %d, picked: %d", a.X, a.Y, a.Picked)
 }
 
 type Player struct {
