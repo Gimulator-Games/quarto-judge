@@ -69,9 +69,9 @@ func (r *Referee) Start() error {
 }
 
 func (r *Referee) listen() error {
+	timer := time.NewTimer(time.Second * 3)
 	for {
 		r.log.Info("starting to listen")
-		timer := time.NewTimer(time.Second * 3)
 		select {
 		case <-timer.C:
 			r.log.WithField("turn", r.board.Turn).Debug("turn's time is over")
@@ -84,6 +84,8 @@ func (r *Referee) listen() error {
 
 			if err := r.judge(obj); err != nil {
 				r.log.WithError(err).Error("could not judge the recieved object")
+			} else {
+				timer = time.NewTimer(time.Second * 3)
 			}
 		}
 	}
